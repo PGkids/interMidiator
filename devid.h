@@ -9,8 +9,4 @@
 #define ODEVID_BEGIN (NUM_DEVID+1)
 #define ODEVID_END (2*NUM_DEVID+1)
 
-
-
-
-
 #endif
