@@ -86,6 +86,9 @@ int rd_chr()
     return 'A' + (c-'a');
   else if( c == '\r' || c == '\t' )
     return ' ';
+  else if( c == EOF ){
+    exit(-1);
+  }
   else{
     errorf("err[%c]\n",c);
     fflush(stderr);
