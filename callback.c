@@ -38,6 +38,8 @@ void initialize_callback_table(callback_table_t *table)
   table->infos = (callback_info_t*)calloc(table->max, sizeof(callback_info_t));
 
   table->filter_pattern = NULL;
+  table->callback_id_for_begin = NULL;
+  table->callback_id_for_end = NULL;
   table->callback_id_for_denied = NULL;
   table->callback_id_for_otherwise = NULL;
 }
