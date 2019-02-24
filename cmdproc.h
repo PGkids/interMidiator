@@ -10,6 +10,7 @@ typedef int (*cmdproc_t)(int n_args, char** args);
 
 #define CPDECL(name) int cmdproc##name(int, char**);
 
+CPDECL(DEBUG)
 CPDECL(LIST)
 CPDECL(OPEN)
 CPDECL(QUIT)

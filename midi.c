@@ -10,14 +10,23 @@
 #include <mmsystem.h>
 #include "callback.h"
 
-#define MIDI_TABLE_SIZE 4096
+#define MIDI_TABLE_SIZE 256
+#define RDBUFF_SIZE 4096
+
 
 typedef struct {
+  bool listening;
   HMIDIIN handle;
+  MIDIHDR hdr;
+  int translate_to; // 8 or 9 or (0 default) 
+  uint8_t rdbuff[RDBUFF_SIZE];
   callback_table_t callback_table;
 } midi_in_info_t;
+
 typedef struct {
   HMIDIOUT handle;
+  HANDLE   thread_handle;
+  DWORD    thread_id;
 } midi_out_info_t;
 
 static midi_in_info_t  midi_ins[MIDI_TABLE_SIZE];
@@ -103,6 +112,11 @@ char** mo_enum_device_names()
   return names;
 }
 
+static inline void shex02(char *s, int h)
+{
+  s[0] = (h&0xF0) < 0xA0 ? (char)(h>>4) + '0' : (char)(h>>4) + ('A'-10);
+  s[1] = (h&0x0F) < 0x0A ? (char)(h&0x0F) + '0' : (char)(h&0x0F) + ('A'-10);
+}
 
 void CALLBACK MidiInProc(HMIDIIN hmi, UINT message, DWORD index, DWORD param, DWORD param2)
 {
@@ -124,6 +138,19 @@ void CALLBACK MidiInProc(HMIDIIN hmi, UINT message, DWORD index, DWORD param, DW
         case 0x8: case 0x9: case 0xA: case 0xB: case 0xE:
           data[2] = val2;
           len = 3;
+
+          // translation
+          if((status_byte&0xF0)==0x90 &&
+              info->translate_to==MIDIIN_TRANSLATE_TO_8
+              && data[2]==0 ){
+            // NOTEON --> NOTEOFF
+            data[0] = 0x80 | (data[0]&0x0F);
+          }else if ((status_byte&0xF0)==0x80 && info->translate_to==MIDIIN_TRANSLATE_TO_9){
+            // NOTEOFF --> NOTEON
+            data[0] = 0x90 | (data[0]&0x0F);
+            data[2] = 0;
+          }
+            
           break;
         default:
           len = 2; break;
@@ -145,45 +172,84 @@ void CALLBACK MidiInProc(HMIDIIN hmi, UINT message, DWORD index, DWORD param, DW
       }
 
       
-      global_lock();
       if( 0 == len )
-        printf("0 %03X RECVERROR\n");
+        errorf("RECVERROR\n");
       else{
         char signal[7];
-        switch( len ){
-        case 1: sprintf(signal,"%02X",data[0]); break;
-        case 2: sprintf(signal,"%02X%02X",data[0], data[1]); break;
-        case 3: sprintf(signal,"%02X%02X%02X",data[0], data[1], data[2]); break;
+        shex02(signal, data[0]);
+        if( len == 1 )
+          signal[2] = '\0';
+        else{
+          shex02(signal+2, data[1]);
+          if( len == 2 )
+            signal[4] = '\0';
+          else{
+            shex02(signal+4, data[2]);
+            signal[6] = '\0';
+          }
         }
+        
+        /**** DEBUG ***/
+        DEBUGF("[Signal]: IN%03X,%s", index, signal);
+        /*** END OF DEBUG ***/
+        global_lock();
         dispatch_callbacks(index, signal, &info->callback_table, &global_callback_table);
+        fflush(stdout);
+        global_unlock();
       }
-      fflush(stdout);
-      global_unlock();
-      //midiOutShortMsg(hmo, dwParam1);
     }
     break;
   case MIM_LONGDATA:
     {
       MIDIHDR *hdr = (MIDIHDR*)param;
       int len = (int)hdr->dwBytesRecorded;
-      if( len > 0 ){
-        //midi->deliver(midi->_buffer_of_header, len);
-        midiInPrepareHeader(info->handle, hdr, sizeof(MIDIHDR));
+      //printf("DEBUG: [LONGDATA] %d\n",len);
+      if( len>0 ){
+        if( ((uint8_t*)hdr->lpData)[len-1]==0xF7 ){
+          len = &((uint8_t*)hdr->lpData)[len] - info->rdbuff; // 真の長さ          
+          hdr->lpData = info->rdbuff; // reset buffer
+          uint8_t *begin=info->rdbuff;
+          begin[len*2] = '\0';
+          for(uint8_t *src=begin+len-1,*dst=begin+(len-1)*2; src>=begin; src--, dst-=2)
+            shex02(dst,*src);
+          DEBUGF("[SysEx]: IN%03X,%s", index, begin);
+          
+          global_lock();
+          dispatch_callbacks(index, info->rdbuff, &info->callback_table, &global_callback_table);
+          fflush(stdout);
+          global_unlock();          
+        }else
+          hdr->lpData = ((uint8_t*)hdr->lpData)+len;
+
+        hdr->dwBytesRecorded = 0;
+        
+
         midiInAddBuffer(info->handle, hdr, sizeof(MIDIHDR));
       }
+
     }
     break;
   }
 }
 
-midi_t mi_open(int device_index)
+midi_t mi_open(int device_index, int translate_to)
 {
   HMIDIIN h;
   midi_t reserved = alloc_midi_in(NULL); // 仮確保
   if( midiInOpen(&h, (UINT)device_index, (DWORD_PTR)MidiInProc, reserved, CALLBACK_FUNCTION) == MMSYSERR_NOERROR ){
     //midiInStart(h);
-    midi_ins[reserved].handle = h;
-    initialize_callback_table(&midi_ins[reserved].callback_table);
+    midi_in_info_t *info = &midi_ins[reserved];
+    info->listening = false;
+    info->handle = h;
+    info->translate_to = translate_to;
+    initialize_callback_table(&info->callback_table);
+
+    memset(&info->hdr, 0, sizeof(MIDIHDR));
+    info->hdr.lpData = midi_ins[reserved].rdbuff;
+    info->hdr.dwBufferLength = RDBUFF_SIZE;
+    midiInPrepareHeader(h, &info->hdr, sizeof(MIDIHDR));
+    midiInAddBuffer(h, &info->hdr, sizeof(MIDIHDR));
+    
     return reserved;
   }
   else
@@ -192,13 +258,24 @@ midi_t mi_open(int device_index)
 
 void mi_close(midi_t indev)
 {
-  midiInClose(CASTIN(indev));
-  midi_ins[indev].handle = NULL;
+  midi_in_info_t *info = &midi_ins[indev];
+  HMIDIIN hmi = CASTIN(indev);
+
+  // 停止していなければ、クローズの前処理の前に停止させる
+  if( info->listening )
+    midiInStop(hmi);
+  
+  midiInUnprepareHeader(hmi, &info->hdr, sizeof(MIDIHDR));
+  midiInClose(hmi);
+
+  // クローズ後の処理
+  info->handle = NULL;
   finalize_callback_table(&midi_ins[indev].callback_table);
 }
 
 void mi_listen(midi_t indev)
 {
+  midi_ins[indev].listening = true;
   midiInStart(CASTIN(indev));
 }
 
@@ -209,14 +286,65 @@ void mi_reset(midi_t indev)
 
 void mi_stop(midi_t indev)
 {
+  midi_ins[indev].listening = false;
   midiInStop(CASTIN(indev));
+}
+
+#define WM_MO_SEND_SHORT WM_USER
+#define WM_MO_SEND_LONG  (WM_USER+1)
+#define WM_MO_QUIT (WM_USER+2)
+
+DWORD WINAPI _midiout_proc(LPVOID arg)
+{
+  midi_out_info_t *info = (midi_out_info_t*)arg;
+  HMIDIOUT handle = info->handle;
+  //midi_out_info_t *info = &midi_outs[(int)arg];
+  MSG msg;
+  MIDIHDR hdr;
+  while(1){
+    GetMessage(&msg, NULL, 0,0); //WM_MO_SEND_SHORT, WM_MO_QUIT);
+    //printf("[DEBUG]: msg: %d\n",msg.message);
+
+    switch( msg.message ){
+    case WM_MO_SEND_SHORT:
+      midiOutShortMsg(handle, (DWORD)msg.wParam);
+      break;
+
+    case WM_MO_SEND_LONG:
+      hdr.lpData = (LPVOID)msg.lParam;
+      hdr.dwBufferLength = msg.wParam;
+      hdr.dwBytesRecorded = msg.wParam;
+      midiOutPrepareHeader(handle, &hdr, sizeof(MIDIHDR));
+      midiOutLongMsg(handle, &hdr, sizeof(MIDIHDR));
+ 
+      while ((hdr.dwFlags&MHDR_DONE) != MHDR_DONE)
+          Sleep(0);
+
+      midiOutUnprepareHeader(handle, &hdr, sizeof(MIDIHDR));
+      free(hdr.lpData);
+      
+      //printf("[DEBUG] ok cnt=%d\n",cnt);
+      break;
+
+      
+    case WM_MO_QUIT: // close
+      //printf("[DEBUG] WM_MO_QUIT\n");
+      return 0;
+    }
+  }
+  
 }
 
 midi_t mo_open(int device_index)
 {
   HMIDIOUT h=0;
-  if(midiOutOpen(&h, (UINT)device_index, 0, 0, CALLBACK_NULL) == MMSYSERR_NOERROR )
-    return alloc_midi_out(h);
+  if(midiOutOpen(&h, (UINT)device_index, 0, 0, CALLBACK_NULL) == MMSYSERR_NOERROR ){
+    midi_t outdev = alloc_midi_out(h);
+    midi_out_info_t *info = &midi_outs[outdev];
+    info->thread_handle = CreateThread(NULL, 0, (LPVOID)_midiout_proc, info, 0,
+                                       &info->thread_id);
+    return outdev;
+  }
   else
     return 0;
 }
@@ -224,7 +352,15 @@ midi_t mo_open(int device_index)
 void mo_close(midi_t outdev)
 {
   midiOutClose(CASTOUT(outdev));
-  midi_outs[outdev].handle = NULL;
+  midi_out_info_t *info = &midi_outs[outdev];
+
+  // joining thread
+  PostThreadMessage(info->thread_id, WM_MO_QUIT, 0, 0);
+  WaitForSingleObject(info->thread_handle,INFINITE); 
+  CloseHandle(info->thread_handle);
+
+  info->handle = NULL;
+  info->thread_handle = NULL;
 }
 
 void mo_reset(midi_t outdev)
@@ -234,16 +370,42 @@ void mo_reset(midi_t outdev)
 
 void mo_send1(midi_t outdev, uint8_t status_byte)
 {
-  midiOutShortMsg(CASTOUT(outdev), status_byte);
+  midi_out_info_t *info = &midi_outs[outdev];
+  PostThreadMessage(info->thread_id, WM_MO_SEND_SHORT, status_byte, 0);
+  
+  //midiOutShortMsg(CASTOUT(outdev), status_byte);
 }
 void mo_send2(midi_t outdev, uint8_t status_byte, uint8_t data_byte)
 {
-  midiOutShortMsg(CASTOUT(outdev), status_byte|(data_byte<<8));
+  midi_out_info_t *info = &midi_outs[outdev];
+  PostThreadMessage(info->thread_id, WM_MO_SEND_SHORT,
+                    status_byte|(data_byte<<8), 0);
+
+  //midiOutShortMsg(CASTOUT(outdev), status_byte|(data_byte<<8));
 }
 void mo_send3(midi_t outdev, uint8_t status_byte, uint8_t data_byte_1, uint8_t data_byte_2)
 {
-  midiOutShortMsg(CASTOUT(outdev), status_byte|(data_byte_1<<8)|(data_byte_2<<16));
+  midi_out_info_t *info = &midi_outs[outdev];
+  PostThreadMessage(info->thread_id, WM_MO_SEND_SHORT,
+                    status_byte|(data_byte_1<<8)|(data_byte_2<<16), 0);
+
+  //midiOutShortMsg(CASTOUT(outdev), status_byte|(data_byte_1<<8)|(data_byte_2<<16));
 }
+
+void mo_send_sysex(midi_t outdev, const uint8_t *msg, int msg_len)
+{
+  midi_out_info_t *info = &midi_outs[outdev];
+  uint8_t *buf = (uint8_t*)malloc(msg_len);
+  memcpy(buf, msg, msg_len);
+  PostThreadMessage(info->thread_id, WM_MO_SEND_LONG,
+                    msg_len, (LPARAM)buf);
+                    
+  //printf("[DEBUG] %d\n",(int)msg_len);
+  //for(int i=0; i<msg_len;  i++)
+  //  printf("%02X", msg[i]);
+  //printf("\n");
+}
+
 
 
 bool register_global_callback(const char *signal_pattern, const char *callback_id)

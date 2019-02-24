@@ -11,7 +11,7 @@ void dispatch_command(const char *cmd, int n_args, char **args)
 {
 #define EQL(s) (0==strcmp(s+1,cmd+1))
 
-  cmdproc_t proc;
+  cmdproc_t proc = NULL;
 
   switch( cmd[0] ){
   case 'C':
@@ -19,6 +19,11 @@ void dispatch_command(const char *cmd, int n_args, char **args)
       proc = cmdprocCALLBACK;
     else if( EQL("CLOSE") )
       proc = cmdprocCLOSE;
+    break;
+  case 'D':
+    if( EQL("DEBUG") )
+      proc = cmdprocDEBUG;
+    break;
   case 'E':
     if( EQL("ECHO") )
       proc = cmdprocECHO;
@@ -52,19 +57,17 @@ void dispatch_command(const char *cmd, int n_args, char **args)
   }
       
   if( NULL == proc ){
-    errorf("unknown: %s",cmd);
-  }else
-    (*proc)(n_args, args);
+    errorf("unknown command: %s",cmd);
+  }else if( CMDPROC_SUCCESS != (*proc)(n_args, args) )
+    errorf("fatal error: %s",cmd);
 }
 
 static int main_loop();
 
 int main(int argc, char **argv)
 {
-  fprintf(stderr,
-          "interMidiator version 1.0\n"
-          "Copyright (c) PGkids Laboratory\n") ;
-  fflush(stderr);
+  infof("interMidiator");
+  infof("Copyright (c) PGkids Laboratory.") ;
   
   // initialize modules
   system_init_utils(); // utils.c
@@ -145,11 +148,13 @@ static void parse_cmd(char *cmdline)
   n_cmd_elem = cnt;
 }
 
+#define CMDLINE_MAX_LEN 32767
+
 static int main_loop()
 {
   while(1){
-    char cmdline[256];
-    rd_line(cmdline, sizeof(cmdline));
+    static char cmdline[CMDLINE_MAX_LEN+1];
+    rd_line(cmdline, CMDLINE_MAX_LEN);
     //printf("[%s]\n",cmdline);
     parse_cmd(cmdline);
     //for(int i=0; i<n_cmd_elem; i++)

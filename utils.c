@@ -7,6 +7,13 @@
 #include <stdbool.h>
 #include <ctype.h>
 
+bool __intermidiator_debug__ = 0; // GLOBAL
+
+void set_debug(bool enable)
+{
+  __intermidiator_debug__ = enable;
+}
+  
 static CRITICAL_SECTION global_cs;
 static bool global_cs_not_initialized = true;
 
@@ -28,7 +35,7 @@ void global_unlock()
 void errorf(const char *fmt, ...)
 {
   va_list ap;
-  fprintf(stderr, "[ERROR]: ");
+  fprintf(stderr, "*(ERROR) ");
   va_start(ap, fmt);
   vfprintf(stderr, fmt, ap);
   va_end(ap);
@@ -38,7 +45,17 @@ void errorf(const char *fmt, ...)
 void warnf(const char *fmt, ...)
 {
   va_list ap;
-  fprintf(stderr, "[ERROR]: ");
+  fprintf(stderr, "+(WARNING: ");
+  va_start(ap, fmt);
+  vfprintf(stderr, fmt, ap);
+  va_end(ap);
+  fprintf(stderr, "\n");
+}
+
+void infof(const char *fmt, ...)
+{
+  va_list ap;
+  fprintf(stderr, "- ");
   va_start(ap, fmt);
   vfprintf(stderr, fmt, ap);
   va_end(ap);

@@ -26,8 +26,11 @@ bool register_global_filter(const char *signal_pattern);
 bool register_local_filter(midi_t indev, const char *signal_pattern);
 
 
+#define MIDIIN_TRANSLATE_TO_8  8
+#define MIDIIN_TRANSLATE_TO_9  9
+#define MIDIIN_TRANSLATE_NONE  0
 
-midi_t mi_open(int device_index);
+midi_t mi_open(int device_index, int translate_to);
 void mi_close(midi_t);
 void mi_listen(midi_t);
 void mi_stop(midi_t);
@@ -40,6 +43,6 @@ void mo_reset(midi_t);
 void mo_send1(midi_t outdev, uint8_t status_byte);
 void mo_send2(midi_t outdev, uint8_t status_byte, uint8_t data_byte);
 void mo_send3(midi_t outdev, uint8_t status_byte, uint8_t data_byte_1, uint8_t data_byte_2);
-
+void mo_send_sysex(midi_t outdev, const uint8_t *msg, int msg_len);
 
 #endif //_MIDI_H_
