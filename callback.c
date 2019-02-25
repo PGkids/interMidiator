@@ -172,18 +172,31 @@ void del_callback(const char *callback_id, callback_table_t *table)
   // warning
 }
 
-static const char *msg_line = NULL;
-static inline void send_msg_line_if_needed()
+static const char *msg_signal = NULL;
+static midi_t msg_indev = 0;
+static inline void send_msg_signal_if_needed()
 {
-  if( msg_line ){
-    printf("%s\n", msg_line);
-    msg_line = NULL;
+
+  fprintf(stderr,"debug---\n"); fflush(stderr);
+  if( msg_signal ){
+    const char *signal = msg_signal;
+    midi_t indev = msg_indev;
+    if( signal[0]=='F' && signal[1]=='0' ){
+      // sysex
+    }else{
+      int len = signal[2] ? (signal[4] ? 3 : 2) : 1;
+      char tmp[64];
+      printf("%d %03X %s\n",len, indev, signal);
+    }
+
+    //printf("%s\n", msg_signal);
+    msg_signal = NULL;
   }      
 }
 
 static inline void send_callback_id(const char *id)
 {
-  send_msg_line_if_needed();
+  send_msg_signal_if_needed();
   printf("C %s\n", id);
 }
 
@@ -239,10 +252,12 @@ void dispatch_callbacks(midi_t indev, const char *signal,
                         callback_table_t *global_table,
                         callback_table_t *local_table)
 {
-  int len = signal[2] ? (signal[4] ? 3 : 2) : 1;
-  char tmp[64];
-  sprintf(tmp, "%d %03X %s\n",len, indev, signal);
-  msg_line = tmp;
+  msg_signal = signal;
+  msg_indev = indev;
+  //int len = signal[2] ? (signal[4] ? 3 : 2) : 1;
+  //char tmp[64];
+  //sprintf(tmp, "%d %03X %s\n",len, indev, signal);
+  //msg_signal = tmp;
   int st1 = find_callbacks(signal, global_table);
   int st2 = st1&CB_DENIED ? 0 : find_callbacks(signal, local_table);
   if( (st1|st2)&CB_APPLIED )

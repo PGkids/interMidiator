@@ -40,26 +40,29 @@ void errorf(const char *fmt, ...)
   vfprintf(stderr, fmt, ap);
   va_end(ap);
   fprintf(stderr, "\n");
+  fflush(stderr);
 }
 
 void warnf(const char *fmt, ...)
 {
   va_list ap;
-  fprintf(stderr, "+(WARNING: ");
+  fprintf(stderr, "+(WARNING) ");
   va_start(ap, fmt);
   vfprintf(stderr, fmt, ap);
   va_end(ap);
   fprintf(stderr, "\n");
+  fflush(stderr);
 }
 
 void infof(const char *fmt, ...)
 {
   va_list ap;
-  fprintf(stderr, "- ");
+  fprintf(stderr, "| ");
   va_start(ap, fmt);
   vfprintf(stderr, fmt, ap);
   va_end(ap);
   fprintf(stderr, "\n");
+  fflush(stderr);
 }
 
 char* duplicate_string(const char *s)
