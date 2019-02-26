@@ -177,12 +177,13 @@ static midi_t msg_indev = 0;
 static inline void send_msg_signal_if_needed()
 {
 
-  fprintf(stderr,"debug---\n"); fflush(stderr);
+  //fprintf(stderr,"debug---\n"); fflush(stderr);
   if( msg_signal ){
     const char *signal = msg_signal;
     midi_t indev = msg_indev;
     if( signal[0]=='F' && signal[1]=='0' ){
       // sysex
+      printf("X %03X %s\n",indev, signal);
     }else{
       int len = signal[2] ? (signal[4] ? 3 : 2) : 1;
       char tmp[64];
