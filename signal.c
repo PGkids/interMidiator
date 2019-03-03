@@ -11,7 +11,7 @@ bool verify_signal_pattern(const char *signal_pattern)
 bool sigcmp(const char *signal_pattern, const char *signal)
 {
   if( signal_pattern[0] == '!' )
-    return sigcmp(signal_pattern+1, signal);
+    return (! sigcmp(signal_pattern+1, signal));
   
   bool found;
   const char *p=signal_pattern;

@@ -41,7 +41,8 @@ int cmdprocDEBUG(int n_args, char **args)
   return CMDPROC_SUCCESS;
 }
 
-  int cmdprocECHO(int n_args, char **args)
+// 主に同期を取るために使われる
+int cmdprocECHO(int n_args, char **args)
 {
   DEBUGF("ECHO with %d argument(s)", n_args);
   printf("< ");
