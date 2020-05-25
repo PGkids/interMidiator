@@ -100,8 +100,10 @@ int rd_chr()
       return 'A' + (c-'a');
     else if( c == '\r' || c == '\t' )
       return ' ';
-    else if(c == 0xFF)
+    else if(c == 0xFF){
+      /* フロントエンドからのKEEPALIVE信号 */
       receive_keepalive_signal(0, NULL);
+    }
     else if( c == EOF ){
       exit(-1);
     }
