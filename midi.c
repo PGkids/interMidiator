@@ -10,6 +10,49 @@
 #include <mmsystem.h>
 #include "callback.h"
 
+void os_msec_sleep(int msec)
+{
+  Sleep(msec);
+}
+
+void os_abort_with_alert(const char *alert_msg)
+{
+  MessageBox(NULL, TEXT(alert_msg), TEXT("OS ABORTED"), MB_OK|MB_ICONERROR);
+  exit(-1);
+}
+
+static CRITICAL_SECTION _os_exclusive_mutex;
+
+void os_initialize()
+{
+  InitializeCriticalSection(&_os_exclusive_mutex);
+}
+
+void os_exclusive_lock()
+{
+  EnterCriticalSection(&_os_exclusive_mutex);
+}
+
+void os_exclusive_unlock()
+{
+  LeaveCriticalSection(&_os_exclusive_mutex);
+}
+
+DWORD WINAPI _wrapped_thread(LPVOID p)
+{
+  ((void (*)(void))p)();
+}
+
+void os_run_thread(void (*proc)(void))
+{
+  CreateThread(NULL,
+               1024,
+               _wrapped_thread,
+               proc,
+               0,
+               NULL);               
+}
+
 #define MIDI_TABLE_SIZE 256
 #define RDBUFF_SIZE 4096
 
@@ -34,7 +77,7 @@ static midi_out_info_t midi_outs[MIDI_TABLE_SIZE];
 
 callback_table_t global_callback_table;
 
-void system_init_midi()
+void os_midi_initialize()
 {
   memset(midi_ins, 0, sizeof(midi_ins));
   memset(midi_outs, 0, sizeof(midi_outs));

@@ -24,6 +24,5 @@ CPDECL(SEND)
 CPDECL(RESET)
 
 
-
 #endif
 

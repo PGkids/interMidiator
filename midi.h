@@ -6,14 +6,21 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* 
+/* <<OS depend>>
+   os_* ... os function
    mi_* ... midi in 
    mo_* ... midi out
 */
 
 typedef unsigned short midi_t;
 
-void system_init_midi();
+void os_initialize();
+void os_exclusive_lock(), os_exclusive_unlock();
+void os_run_thread( void (*proc)(void) );
+void os_msec_sleep(int msec);
+void os_abort_with_alert(const char *alert_msg);
+
+void os_midi_initialize();
 
 char** mi_enum_device_names();
 char** mo_enum_device_names();

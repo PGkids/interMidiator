@@ -3,9 +3,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "cmdproc.h"
 #include "utils.h"
 #include "midi.h"
+
+static void receive_keepalive_signal();
+static void keepalive_watchdog(void);
+static clock_t keepalive_last_clock;
 
 void dispatch_command(const char *cmd, int n_args, char **args)
 {
@@ -71,31 +76,40 @@ int main(int argc, char **argv)
   
   // initialize modules
   system_init_utils(); // utils.c
-  system_init_midi(); // midi.c
+
+  os_initialize(); // midi.c
+  os_midi_initialize();    // midi.c
+
+  keepalive_last_clock = clock();
 
   printf("READY\n");
   fflush(stdout);
-  
+
+  os_run_thread(keepalive_watchdog);
   return main_loop();
 }
 
 
 int rd_chr()
 {
-  int c = getchar();
-  if( c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c== ' ' || c == '*' || c == '.' || c == ',' || c == '\n')
-    return c;
-  else if( c >= 'a' && c <= 'z' )
-    return 'A' + (c-'a');
-  else if( c == '\r' || c == '\t' )
-    return ' ';
-  else if( c == EOF ){
-    exit(-1);
-  }
-  else{
-    errorf("err[%c]\n",c);
-    fflush(stderr);
-    return -1;
+  while(1){
+    int c = getchar();
+    if( c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c== ' ' || c == '*' || c == '.' || c == ',' || c == '\n')
+      return c;
+    else if( c >= 'a' && c <= 'z' )
+      return 'A' + (c-'a');
+    else if( c == '\r' || c == '\t' )
+      return ' ';
+    else if(c == 0xFF)
+      receive_keepalive_signal(0, NULL);
+    else if( c == EOF ){
+      exit(-1);
+    }
+    else{
+      errorf("err[%c]\n",c);
+      fflush(stderr);
+      return -1;
+    }
   }
 }
 
@@ -160,5 +174,31 @@ static int main_loop()
     //for(int i=0; i<n_cmd_elem; i++)
     //  printf("{%s}\n", cmd_elems[i]);
     dispatch_command(cmd_elems[0], n_cmd_elem-1, &cmd_elems[1]);
+  }
+}
+
+
+
+static void receive_keepalive_signal()
+{
+  os_exclusive_lock();
+  keepalive_last_clock = clock();
+  os_exclusive_unlock();
+}
+
+static void keepalive_watchdog(void)
+{
+  for(;;){
+    os_msec_sleep(2500);
+
+    clock_t cur_clock = clock();
+    clock_t last_clock;
+
+    os_exclusive_lock();
+    last_clock = keepalive_last_clock;
+    os_exclusive_unlock();
+    
+    if( (cur_clock - last_clock)/CLOCKS_PER_SEC > 6.0)
+      os_abort_with_alert("FRONT-END MAY BE CRUSHED.");
   }
 }
