@@ -6,6 +6,7 @@
 #include <time.h>
 #include "cmdproc.h"
 #include "utils.h"
+#include "os.h"
 #include "midi.h"
 
 static void receive_keepalive_signal();

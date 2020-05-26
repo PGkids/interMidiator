@@ -71,17 +71,17 @@ static void list_names(char **names)
   
   printf("}\n");
   fflush(stdout);
-  free_enum_device_names(names);
+  os_midi_free_enum_device_names(names);
 }
 
 static void list_input_devices()
 {
-  list_names(mi_enum_device_names());
+  list_names(os_midi_in_enum_device_names());
 }
 
 static void list_output_devices()
 {
-  list_names(mo_enum_device_names());
+  list_names(os_midi_out_enum_device_names());
 }
 
 
@@ -151,9 +151,9 @@ int cmdprocOPEN(int n_args, char **args)
     else
       return CMDPROC_FATAL;
   
-    internal_dev = mi_open(device_index, translate_to);
+    internal_dev = os_midi_in_open(device_index, translate_to);
   }else if( 0 == strcmp(direction, "OUTPUT") )
-    internal_dev = mo_open(device_index);
+    internal_dev = os_midi_out_open(device_index);
   else
     return CMDPROC_FATAL;
   
@@ -181,9 +181,9 @@ int cmdprocCLOSE(int n_args, char **args)
   DEBUGF("CLOSE %s %d", direction, dev);
 
   if( direction[0] == 'I' )
-    mi_close(dev);
+    os_midi_in_close(dev);
   else 
-    mo_close(dev);
+    os_midi_out_close(dev);
 
   return CMDPROC_SUCCESS;
 
@@ -202,9 +202,9 @@ int cmdprocRESET(int n_args, char **args)
   DEBUGF("CLOSE %s %d", direction, dev);
 
   if( direction[0] == 'I' )
-    mi_reset(dev);
+    os_midi_in_reset(dev);
   else
-    mo_reset(dev);
+    os_midi_out_reset(dev);
 
   return CMDPROC_SUCCESS;
 
@@ -222,7 +222,7 @@ int cmdprocSTOP(int n_args, char **args)
   if( ! check_dev(args[0], &dev, "STOP") )
     return CMDPROC_FATAL;
 
-  mi_stop(dev);
+  os_midi_in_stop(dev);
   return CMDPROC_SUCCESS;
 
 }
@@ -240,7 +240,7 @@ int cmdprocLISTEN(int n_args, char **args)
     return CMDPROC_FATAL;
 
   
-  mi_listen(dev);
+  os_midi_in_listen(dev);
   return CMDPROC_SUCCESS;
 }
 
@@ -270,7 +270,7 @@ static int try_send_sysex(midi_t dev, char *msg, size_t msg_len)
 
   *bytes = 0xF7;
 
-  mo_send_sysex(dev, (uint8_t*)msg, (int)msg_len/2);
+  os_midi_out_send_sysex(dev, (uint8_t*)msg, (int)msg_len/2);
   
   return CMDPROC_SUCCESS;
 }
@@ -364,14 +364,14 @@ int cmdprocSEND(int n_args, char **args)
   if( passed ){
     uint8_t status_byte = (uint8_t)((hex2int(msg[0])<<4)|hex2int(msg[1]));
     if( msg_len == 2 )
-      mo_send1(dev, status_byte);
+      os_midi_out_send1(dev, status_byte);
     else{
       uint8_t data_1 = (uint8_t)((hex2int(msg[2])<<4)|hex2int(msg[3]));
       if( msg_len == 4 )
-        mo_send2(dev, status_byte, data_1);
+        os_midi_out_send2(dev, status_byte, data_1);
       else{
         uint8_t data_2 = (uint8_t)((hex2int(msg[4])<<4)|hex2int(msg[5]));
-        mo_send3(dev, status_byte, data_1, data_2);
+        os_midi_out_send3(dev, status_byte, data_1, data_2);
       }
     }
   }else{

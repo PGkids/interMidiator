@@ -32,4 +32,8 @@ void dispatch_callbacks(midi_t indev, const char *signal,
                         callback_table_t *global_table,
                         callback_table_t *local_table);
 
+
+callback_table_t* os_get_global_callback_table();
+callback_table_t* os_get_local_callback_table(midi_t indev);
+
 #endif
